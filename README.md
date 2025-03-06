@@ -27,13 +27,20 @@ You need [ollama](https://ollama.com/) installed and running for the
 game to work.
 
 By default the game will use the `mistral-small:22b` model but you
-can use other models.
+can use other models, however if the game's prompts are not optimized for
+the model you choose, it will not work well or at all.
 
-Note that running that model requires **lots of memory** (16GB RAM)
-and a very powerful CPU for it to be fast enough to be playable.
+Downloading this model requires almost 20 GB of free space.
+
+Running the default model requires **lots of memory** (16GB free RAM)
+and hardware acceleration (CUDA/ROCM) with 16 GB VRAM
+for it to be fast enough to be smooth.
 
 If you don't have hardware acceleration for ollama I recommend using
-the `llama3.3:3b` model instead.
+the `llama3.3:3b` model instead. The quality is significantly lower but
+it's a lot easier to run and the game should be functional.
+
+Downloading this model requires only a couple GBs of free space.
 
 ```bash
 # Install the model
@@ -57,4 +64,5 @@ You can also specify a different model or ollama address:
 npm run build-and-run -- --model=llama3.3:3b --ollamaAddress=http://localhost:11434
 ```
 
+Finally pass the `--debug` flag to see detailed debug info during gameplay.
 

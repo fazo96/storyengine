@@ -26,6 +26,11 @@ export interface Tools {
   executeToolCall: (toolCall: ToolCall) => void | Promise<void>;
 }
 
+export interface LLM {
+  inference: (systemPrompt: string, userPrompt: string, tools?: Tools, callback?: ((content: string) => void) | null) => Promise<string>;
+  isLoading: boolean;
+}
+
 /**
  * Use LLM hook: manages communication with the LLM
  * @param prompt - The prompt to use for the LLM
@@ -33,7 +38,7 @@ export interface Tools {
  * @param tools - The tools available to the LLM
  * @returns The LLM hook
  */
-export function useLLM(ollamaAddress: string | undefined, model: string | undefined = 'mistral-small:22b') {
+export function useLLM(ollamaAddress: string | undefined, model: string | undefined = 'mistral-small:22b'): LLM {
 	const [isLoading, setIsLoading] = useState(false);
 
 	// Initialize Ollama client

@@ -4,6 +4,7 @@ export const locationTypes = [
   'cave',
   'forest',
   'mountain',
+  'road',
 ]
 
 export const locationModifiers = [

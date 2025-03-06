@@ -12,6 +12,7 @@ const cli = meow(
 	Options
 		--ollama-address address (defaults to http://localhost:11434)
 		--model model (defaults to mistral-small:22b)
+    --debug (defaults to false)
 
 	Examples
 	  $ storyengine --ollama-address http://localhost:11434 --model llama3.2:3b
@@ -26,8 +27,18 @@ const cli = meow(
 				type: 'string',
 				default: 'mistral-small:22b',
 			},
+      debug: {
+        type: 'boolean',
+        default: false,
+      },
 		},
 	},
 );
 
-render(<App ollamaAddress={cli.flags.ollamaAddress} model={cli.flags.model} />);
+render(
+  <App
+    ollamaAddress={cli.flags.ollamaAddress}
+    model={cli.flags.model}
+    debug={cli.flags.debug}
+  />,
+);

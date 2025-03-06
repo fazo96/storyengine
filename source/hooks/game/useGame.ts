@@ -1,11 +1,10 @@
 import { create } from 'zustand'
-import { useLLM } from './useLLM.js'
+import { useLLM } from '../llm/useLLM.js'
 import { useEffect } from 'react'
 import dedent from 'dedent'
-import { locationTypes } from '../engine/oracle.js'
-import { locationModifiers } from '../engine/oracle.js'
-import _ from 'lodash'
-import useLLMTools from './useLLMTools.js'
+import useLLMTools from '../llm/useLLMTools.js'
+import { useGenerateLocation } from './generators/useGenerateLocation.js'
+import { useStreamNarration } from '../util/useStreamNarration.js'
 
 export interface Location {
   id: number,
@@ -179,7 +178,7 @@ const useGameStore = create<GameState>((set, get) => ({
   }
 }))
 
-const systemPrompt = dedent(`
+export const systemPrompt = dedent(`
   You are a game engine for text role playing.
   Your job is to ONLY DESCRIBE THE WORLD.
   You should not make any decisions or take any actions.
@@ -189,71 +188,24 @@ const systemPrompt = dedent(`
   You MUST always refer to the player as "You"
 `)
 
+interface GameOptions {
+  ollamaAddress: string | undefined;
+  model: string;
+}
+
 /**
  * Use Game hook: manages the game state
  * @param ollamaAddress - The address of the Ollama server
  * @param model - The model to use for the LLM
  * @returns The game state and actions to interact with the game
  */
-function useGame(ollamaAddress: string | undefined, model: string) {
+function useGame(options: GameOptions) {
   const gameStore = useGameStore();
   const tools = useLLMTools(gameStore);
-  const llm = useLLM(ollamaAddress, model);
+  const llm = useLLM(options.ollamaAddress, options.model);
 
-  async function generateLocation(connectedLocationIds: number[]): Promise<Omit<Location, 'id'>> {
-    const locationType = _.sample(locationTypes);
-    const locationModifier = _.sample(locationModifiers);
-    const name = `${locationType} of ${locationModifier}`;
-
-    const prompt = dedent(`
-      Generate a short description of a ${locationType} location that is ${locationModifier}.
-      The description should be a few sentences long and include key details about the location.
-    `)
-
-    gameStore.addLogEntry({
-      role: 'debug',
-      content: `PROMPT: ${prompt}`,
-    })
-
-    const description = await llm.inference(systemPrompt, prompt);
-
-    gameStore.addLogEntry({
-      role: 'debug',
-      content: `DESCRIPTION: ${description}`,
-    })
-
-    return {
-      name: name,
-      description: description,
-      connections: connectedLocationIds,
-    }
-  }
-
-  async function streamNarration(narrationPrompt: string) {
-    let entryId: null | number = null
-
-    const narration = await llm.inference(systemPrompt, narrationPrompt, undefined, (content: string) => {
-      if (entryId === null) {
-        entryId = gameStore.addLogEntry({
-          role: 'narrator',
-          content: content,
-          loading: true,
-        })
-      } else {
-        gameStore.updateLogEntry(entryId, {
-          content: content,
-        })
-      }
-    });
-
-    if (entryId !== null) {
-      gameStore.updateLogEntry(entryId, {
-        loading: false,
-      })
-    }
-
-    return narration;
-  }
+  const generateLocation = useGenerateLocation(gameStore, llm);
+  const streamNarration = useStreamNarration(gameStore, llm);
 
   function debugPrintGameState() {
     gameStore.addLogEntry({
@@ -287,7 +239,11 @@ function useGame(ollamaAddress: string | undefined, model: string) {
     })
 
     const firstLocationId = gameStore.addLocation(await generateLocation([]));
-    gameStore.addLocation(await generateLocation([firstLocationId]));
+
+    // Generate three locations connected to the first location
+    for (let i = 0; i < 3; i++) {
+      gameStore.addLocation(await generateLocation([firstLocationId]));
+    }
 
     gameStore.addLogEntry({
       role: 'narrator',
@@ -299,6 +255,7 @@ function useGame(ollamaAddress: string | undefined, model: string) {
     await describeCurrentLocation()
   }
 
+  // This is the function that will be called when the player makes a move
   async function play(command: string) {
     gameStore.addLogEntry({
       role: 'player',
@@ -331,7 +288,21 @@ function useGame(ollamaAddress: string | undefined, model: string) {
       })
     }
 
-    if (locationBefore !== locationAfter) {
+    gameStore.addLogEntry({
+      role: 'debug',
+      content: 'Game state after command',
+      debugInfo: {
+        locationBefore,
+        locationAfter,
+      },
+    })
+    if (locationAfter && locationBefore !== locationAfter) {
+      if (locationAfter.connections.length < 2) {
+        // Add two other connections
+        gameStore.addLocation(await generateLocation([locationAfter.id]));
+        gameStore.addLocation(await generateLocation([locationAfter.id]));
+      }
+
       await describeCurrentLocation();
     }
   }

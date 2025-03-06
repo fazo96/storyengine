@@ -1,5 +1,5 @@
 import { Tool, ToolCall } from "ollama"
-import { GameState } from "./useGame.js"
+import { GameState } from "../game/useGame.js"
 import { Tools } from "./useLLM.js";
 
 /**
@@ -42,12 +42,13 @@ export default function useLLMTools(gameState: GameState): Tools {
 
   const executeToolCall = (toolCall: ToolCall) => {
     gameState.addLogEntry({
-      role: 'narrator',
+      role: 'debug',
       content: `Executing tool call: ${toolCall.function.name} ${JSON.stringify(toolCall.function.arguments)}`,
     });
 
+    try {
     if (toolCall.function.name === 'move') {
-      gameState.move(toolCall.function.arguments['locationId']);
+      gameState.move(parseInt(toolCall.function.arguments['locationId'], 10));
     } else if (toolCall.function.name === 'reply') {
       gameState.addLogEntry({
         role: 'narrator',
@@ -57,6 +58,15 @@ export default function useLLMTools(gameState: GameState): Tools {
       gameState.addLogEntry({
         role: 'event',
         content: `Unknown tool call: ${toolCall.function.name} ${JSON.stringify(toolCall.function.arguments)}`,
+      });
+      }
+    } catch(error) {
+      gameState.addLogEntry({
+        role: 'debug',
+        content: `Error executing tool call: ${toolCall.function.name} ${JSON.stringify(toolCall.function.arguments)}`,
+        debugInfo: {
+          error: error instanceof Error ? error.message : String(error),
+        },
       });
     }
   }
