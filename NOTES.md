@@ -21,3 +21,24 @@ The result can be given adjective modifiers to improve the flavor text generated
 A name generator is also needed for people, places, items, monsters, and possibly more.
 
 Procedural generation with the LLM can help generate things like services at shops, locations, etc.
+
+## World gen
+
+World gen should work with a world broken up in a hierarchy such as:
+
+- Region: wide area with its own climate and biome
+- Place: a town, village, or other landmark within a region. Also includes roads connecting them
+- Room: the smallest atom. Is connected to other rooms including ones belonging to different places and regions.
+
+The player, entities etc are all in a room.
+
+The world gen works like this:
+
+1. generate a bunch of regions
+2. pick a random region and generate a bunch places in it
+3. pick a random place and generate a bunch of rooms. Make sure random other places are picked for being connected to this one via rooms.
+4. spawn the player into a random room that was generated
+
+When visiting a place, its details and room get generated on entering.
+
+This hopefully can provide a sense of continuity because the rooms and places would take their parents descriptions when generating them.
