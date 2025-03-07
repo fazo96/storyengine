@@ -28,6 +28,7 @@ export interface LogEntry {
   content: string,
   debugInfo?: any,
   loading?: boolean,
+  progress?: number
 }
 
 export interface GameState {
@@ -233,17 +234,28 @@ function useGame(options: GameOptions) {
   // This is the function that will be called when the game is initialized
 
   async function initGame() {
-    gameStore.addLogEntry({
+    const logEntryId = gameStore.addLogEntry({
       role: 'narrator',
       content: 'Welcome to the game! Generating world...',
+      progress: 0,
     })
 
     const firstLocationId = gameStore.addLocation(await generateLocation([]));
+    gameStore.updateLogEntry(logEntryId, {
+      progress: 1 / 4.0,
+    })
 
     // Generate three locations connected to the first location
     for (let i = 0; i < 3; i++) {
       gameStore.addLocation(await generateLocation([firstLocationId]));
+      gameStore.updateLogEntry(logEntryId, {
+        progress: (i + 1) / 4.0,
+      })
     }
+
+    gameStore.updateLogEntry(logEntryId, {
+      progress: 1,
+    })
 
     gameStore.addLogEntry({
       role: 'narrator',

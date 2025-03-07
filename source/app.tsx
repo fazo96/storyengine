@@ -29,7 +29,7 @@ export default function App({
   const logEntries = debug ? log : log.filter((logEntry) => logEntry.role !== 'debug');
 
 	return (
-		<Box flexDirection="column" padding={1}>
+		<Box flexDirection="column">
 			{/* Game log */}
 			{logEntries.map((logEntry, index) => (
 				<LogEntry key={index} logEntry={logEntry} debug={debug} />
@@ -44,7 +44,7 @@ export default function App({
 
 			{/* Input field */}
 			{!llm.isLoading && (
-				<Box marginTop={1}>
+				<Box marginTop={1} borderStyle="single">
 					<Text color="green">You: </Text>
 					<TextInput
 						value={input}

@@ -3,6 +3,7 @@ import Markdown from "./Markdown.js";
 import React from "react";
 import { LogEntry as LogEntryType } from "../hooks/game/useGame.js";
 import _ from 'lodash';
+import ProgressBar from "./ProgressBar.js";
 
 export function LogEntry({ logEntry, debug }: { logEntry: LogEntryType, debug: boolean }) {
   let color = 'gray'
@@ -25,6 +26,13 @@ export function LogEntry({ logEntry, debug }: { logEntry: LogEntryType, debug: b
       {logEntry.debugInfo && debug && (
         <Text color="gray" wrap="wrap">
           {JSON.stringify(logEntry.debugInfo, null, 2)}
+        </Text>
+      )}
+      {logEntry.progress !== undefined && logEntry.progress < 1 && (
+        <Text color="gray">
+          <ProgressBar
+            percent={logEntry.progress}
+          />
         </Text>
       )}
     </Box>
