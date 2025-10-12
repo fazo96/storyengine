@@ -93,8 +93,16 @@
     }
 
     a { color: var(--focus); }
+
+    /* Markdown content styling inside messages */
+    .msg p { margin: 0 0 8px 0; }
+    .msg pre { background: var(--panel-2); padding: 8px; border-radius: 6px; overflow: auto; }
+    .msg code { background: var(--panel-2); padding: 2px 4px; border-radius: 4px; }
+    .msg a { text-decoration: underline; }
   </style>
   <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://unpkg.com/marked@12.0.2/marked.min.js"></script>
+  <script src="https://unpkg.com/dompurify@3.0.6/dist/purify.min.js"></script>
 </head>
 <body>
   <div id="app" class="container">
@@ -110,7 +118,7 @@
     </div>
 
     <div id="messages" class="chat" aria-live="polite" :aria-busy="isLoading ? 'true' : 'false'">
-      <div v-for="(m, i) in messages" :key="i" class="msg" :class="m.role" v-text="m.content"></div>
+      <div v-for="(m, i) in messages" :key="i" class="msg" :class="m.role" v-html="renderMarkdown(m.content)"></div>
       <div v-if="isLoading" class="msg a"><span class="spinner" aria-hidden="true"></span>{{ loadingText }}</div>
     </div>
 
@@ -292,7 +300,34 @@
         // Load initial history on mount
         loadHistory();
 
-        return { messages, prompt, isLoading, onSubmit, loadingText, saveId, title, showLoad, saves, newGame, openLoad, closeLoad, loadExisting };
+        function renderMarkdown(text) {
+          try {
+            const md = window.marked;
+            // Render GitHub-flavored markdown with line-breaks
+            md.setOptions({ breaks: true, gfm: true, mangle: false, headerIds: false });
+            const rawHtml = md.parse(String(text ?? ''));
+            return window.DOMPurify.sanitize(rawHtml);
+          } catch (_) {
+            return String(text ?? '');
+          }
+        }
+
+        return {
+          messages,
+          prompt,
+          isLoading,
+          onSubmit,
+          loadingText,
+          saveId,
+          title,
+          showLoad,
+          saves,
+          newGame,
+          openLoad,
+          closeLoad,
+          loadExisting,
+          renderMarkdown
+        };
       }
     }).mount('#app');
   </script>

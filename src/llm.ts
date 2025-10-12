@@ -1,3 +1,5 @@
+import { ChatMessage } from "../main.ts";
+
 export async function inference(messages: ChatMessage[]): Promise<string> {
   try {
     const apiKey = Deno.env.get("NANOGPT_API_KEY");

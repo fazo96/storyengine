@@ -1,4 +1,4 @@
-import { systemPrompt, intro } from "./src/game.ts";
+import { systemPrompt, intro, narratorPrompt } from "./src/game.ts";
 import { DatabaseSync as DB } from "node:sqlite";
 import { inference } from "./src/llm.ts";
 
@@ -138,7 +138,7 @@ async function handleChat(request: Request): Promise<Response> {
 
   // Build OpenAI-compatible chat request from provided history or legacy prompt
   const apiMessages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [];
-  apiMessages.push({ role: "system", content: `${systemPrompt}\n\nYou are the narrator and game master.` });
+  apiMessages.push({ role: "system", content: narratorPrompt });
   if (providedMessages && providedMessages.length > 0) {
     // Map frontend roles ('u'|'a') to OpenAI roles
     for (const m of providedMessages) {
