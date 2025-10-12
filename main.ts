@@ -5,7 +5,7 @@ import { inference } from "./src/llm.ts";
 const serverPort = 8080;
 
 // Open SQLite database and ensure schema
-const db = new DB("storyengine.sqlite");
+const db = new DB(Deno.env.get("DB_PATH") || "storyengine.sqlite");
 db.exec(`
 CREATE TABLE IF NOT EXISTS saves (
   id TEXT PRIMARY KEY,
@@ -16,9 +16,10 @@ CREATE TABLE IF NOT EXISTS saves (
 );
 `);
 
+export type Role = "user" | "assistant" | "system" | "game" | "error";
 
 export interface ChatMessage {
-  role: "user" | "assistant" | "system";
+  role: Role;
   content: string;
 }
 
@@ -33,33 +34,36 @@ function nowMs(): number {
   return Date.now();
 }
 
-function ensureArrayOfMessages(value: unknown, includeSystem: boolean = true): ChatMessage[] {
+function ensureArrayOfMessages(value: unknown, includeRoles: Role[] = []): ChatMessage[] {
   if (!Array.isArray(value)) return [];
-  const roles = includeSystem ? ["user", "assistant", "system"] : ["user", "assistant"];
   return value
     .map((m: unknown) => {
       const obj = m as Record<string, unknown>;
       const role = typeof obj.role === "string" ? obj.role.trim() : "";
       const content = typeof obj.content === "string" ? obj.content.trim() : "";
-      return { role: role as "user" | "assistant" | "system", content };
+      return { role: role as Role, content };
     })
-    .filter((m) => m.content.length > 0 && roles.includes(m.role));
+    .filter((m) => m.content.length > 0 && (includeRoles.length === 0 || includeRoles.includes(m.role)));
 }
 
 async function deriveTitle(messages: ChatMessage[]): Promise<string | null> {
-  if (!messages.find((m) => m.role === "user")) return null;
-  const chatHistory = messages.filter((m) => m.role !== "system").map((m) => `[${m.role}]: ${m.content}`).join("\n\n");
-  const assistant = await inference([
-    { role: "system", content: `Derive a title for this roleplaying session. Reply with ONLY THE TITLE, no other text.\n\n${systemPrompt}\n\nHere is the chat history:\n${chatHistory}`},
-  ]);
-  return assistant;
+  try {
+    if (!messages.find((m) => m.role === "user")) return null;
+    const chatHistory = messages.filter((m) => m.role !== "system").map((m) => `[${m.role}]: ${m.content}`).join("\n\n");
+    const assistant = await inference([
+      { role: "system", content: `Derive a title for this roleplaying session. Reply with ONLY THE TITLE, no other text.\n\n${systemPrompt}\n\nHere is the chat history:\n${chatHistory}`},
+    ]);
+    return assistant;
+  } catch (err) {
+    console.error(`Failed to derive title: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
 }
-
 
 function createSave(initialMessages: ChatMessage[]): { id: string; title: string; messages: ChatMessage[] } {
   const id = crypto.randomUUID();
   const title = "New Game"; // placeholder until first user message
-  const messagesJson = JSON.stringify(initialMessages.filter((m) => m.role !== "system"));
+  const messagesJson = JSON.stringify(initialMessages.filter((m) => ["user", "assistant", "game"].includes(m.role)));
   const ts = nowMs();
   db.prepare(
     "INSERT INTO saves (id, title, messages_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
@@ -87,7 +91,7 @@ async function updateSave(id: string, messages: ChatMessage[]): Promise<{ title:
     const derived = await deriveTitle(messages);
     if (derived) title = derived;
   }
-  const messagesJson = JSON.stringify(messages.filter((m) => m.role !== "system"));
+  const messagesJson = JSON.stringify(messages.filter((m) => ["user", "assistant", "game"].includes(m.role)));
   const ts = nowMs();
   db.prepare(
     "UPDATE saves SET title = ?, messages_json = ?, updated_at = ? WHERE id = ?",
@@ -123,7 +127,7 @@ async function handleChat(request: Request): Promise<Response> {
     if (typeof data === "object" && data !== null) {
       const obj = data as Record<string, unknown>;
       const msgs = obj.messages;
-      if (Array.isArray(msgs)) providedMessages = ensureArrayOfMessages(msgs, false);
+      if (Array.isArray(msgs)) providedMessages = ensureArrayOfMessages(msgs);
       const sid = obj.saveId;
       if (typeof sid === "string" && sid.trim().length > 0) providedSaveId = sid.trim();
     }
@@ -141,35 +145,50 @@ async function handleChat(request: Request): Promise<Response> {
   apiMessages.push({ role: "system", content: narratorPrompt });
   if (providedMessages && providedMessages.length > 0) {
     // Map frontend roles ('u'|'a') to OpenAI roles
-    for (const m of providedMessages) {
-      let normalizedRole: "user" | "assistant" | null = null;
-      if (m.role === "user") normalizedRole = "user";
-      if (m.role === "assistant") normalizedRole = "assistant";
-      if (normalizedRole) apiMessages.push({ role: normalizedRole, content: m.content });
+    for (const m of providedMessages.filter((m) => ["user", "assistant"].includes(m.role))) {
+      apiMessages.push({ role: m.role as "user" | "assistant", content: m.content });
     }
   }
 
-  const assistant = await inference(apiMessages);
+  let content = "No response from API";
+  let success = false;
 
-  // Persist to a save (create if missing)
-  let saveId = providedSaveId ?? "";
-  let title = "New Game";
-  const existing = saveId ? getSave(saveId) : null;
-  const messagesWithAssistant: ChatMessage[] = [...(providedMessages ?? []), { role: "assistant", content: String(assistant) }];
-  if (!existing) {
-    const created = createSave(messagesWithAssistant);
-    saveId = created.id;
-    // Immediately update to derive title from first user message
-    const updated = await updateSave(saveId, messagesWithAssistant);
-    title = updated.title;
-  } else {
-    const updated = await updateSave(saveId, messagesWithAssistant);
-    title = updated.title;
+   try {
+    content = await inference(apiMessages);
+    success = true;
+  } catch (err) {
+    success = false;
+    return new Response(JSON.stringify({ assistant: "", error: err instanceof Error ? err.message : String(err) }), {
+      headers: { "content-type": "application/json; charset-utf-8" },
+    });
   }
 
-  // Return JSON response { assistant, saveId, title }
+  // Persist to a save (create if missing)
+  let title = "New Game";
+  let saveId = providedSaveId ?? "";
+  if (success) {
+    try {
+      const existing = saveId ? getSave(saveId) : null;
+      const messagesWithAssistant: ChatMessage[] = [...(providedMessages ?? []), { role: "assistant", content: String(content) }];
+      if (!existing) {
+        const created = createSave(messagesWithAssistant);
+        saveId = created.id;
+        // Immediately update to derive title from first user message
+        const updated = await updateSave(saveId, messagesWithAssistant);
+        title = updated.title;
+      } else {
+        const updated = await updateSave(saveId, messagesWithAssistant);
+        title = updated.title;
+      }
+    } catch (err) {
+      success = false;
+      content = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  // Return JSON response { role, content, saveId, title }
   return new Response(
-    JSON.stringify({ assistant: String(assistant), saveId, title }),
+    JSON.stringify({ role: success ? "assistant" : "error", content: String(content), saveId, title }),
     { headers: { "content-type": "application/json; charset=utf-8" } },
   );
 }

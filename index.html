@@ -193,7 +193,7 @@
             title.value = t || title.value;
             focusInput();
           } catch (e) {
-            messages.value = [{ role: 'assistant', content: `Failed to load history: ${e instanceof Error ? e.message : String(e)}` }];
+            messages.value = [{ role: 'error', content: `Failed to load history: ${e instanceof Error ? e.message : String(e)}` }];
           }
         }
 
@@ -212,10 +212,11 @@
               body: JSON.stringify({ saveId: saveId.value || undefined, messages: messages.value })
             });
             const data = await res.json().catch(() => ({}));
-            const assistant = typeof data.assistant === 'string' ? data.assistant : '';
+            const role = typeof data.role === 'string' ? data.role : '';
+            const dataContent = typeof data.content === 'string' ? data.content : '';
             const error = typeof data.error === 'string' ? data.error : '';
-            const content = error ? `Error: ${error}` : assistant;
-            messages.value.push({ role: 'assistant', content });
+            const content = error ? `Error: ${error}` : dataContent;
+            messages.value.push({ role: role, content });
             const sid = typeof data.saveId === 'string' ? data.saveId : '';
             const t = typeof data.title === 'string' ? data.title : '';
             if (sid) {
@@ -223,7 +224,7 @@
             }
             if (t) title.value = t;
           } catch (e) {
-            messages.value.push({ role: 'assistant', content: `Request failed: ${e instanceof Error ? e.message : String(e)}` });
+            messages.value.push({ role: 'error', content: `Request failed: ${e instanceof Error ? e.message : String(e)}` });
           } finally {
             isLoading.value = false;
           }
