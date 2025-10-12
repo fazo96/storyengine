@@ -16,10 +16,8 @@ async function serveIndex(_request: Request): Promise<Response> {
 
 async function handleChat(request: Request): Promise<Response> {
   // Accept JSON body with full chat history: { messages: [{ role: 'u'|'a'|'user'|'assistant', content: string }, ...] }
-  // Fallback to legacy shape { prompt: string } for backward compatibility.
   const contentType = request.headers.get("content-type") ?? "";
   let providedMessages: Array<{ role: string; content: string }> | null = null;
-  let legacyPrompt = "";
   if (contentType.includes("application/json")) {
     const data: unknown = await request.json().catch(() => ({} as unknown));
     if (typeof data === "object" && data !== null) {
@@ -28,24 +26,17 @@ async function handleChat(request: Request): Promise<Response> {
         providedMessages = msgs
           .map((m: unknown) => {
             const obj = m as Record<string, unknown>;
-            const role = typeof obj.role === "string" ? obj.role : "";
-            const content = typeof obj.content === "string" ? obj.content : "";
+            const role = typeof obj.role === "string" ? obj.role.trim() : "";
+            const content = typeof obj.content === "string" ? obj.content.trim() : "";
             return { role, content };
           })
-          .filter((m) => m.content.trim().length > 0);
-      } else {
-        const maybePrompt = (data as Record<string, unknown>).prompt;
-        legacyPrompt = typeof maybePrompt === "string" ? maybePrompt : "";
+          .filter((m) => m.content.length > 0 && ["u", "a", "user", "assistant"].includes(m.role));
       }
     }
-  } else {
-    const form = await request.formData();
-    const value = form.get("prompt");
-    legacyPrompt = typeof value === "string" ? value : "";
   }
 
   // If neither history nor prompt provided, no-op
-  if ((!providedMessages || providedMessages.length === 0) && !legacyPrompt.trim()) {
+  if (!providedMessages || providedMessages.length === 0) {
     return new Response(JSON.stringify({ assistant: "" }), {
       headers: { "content-type": "application/json; charset=utf-8" },
     });
@@ -70,10 +61,6 @@ async function handleChat(request: Request): Promise<Response> {
       if (m.role === "a" || m.role === "assistant") normalizedRole = "assistant";
       if (normalizedRole) apiMessages.push({ role: normalizedRole, content: m.content });
     }
-  } else if (legacyPrompt.trim()) {
-    // Legacy behavior: start with intro and the single user prompt
-    apiMessages.push({ role: "assistant", content: intro });
-    apiMessages.push({ role: "user", content: legacyPrompt.trim() });
   }
 
   const payload = {

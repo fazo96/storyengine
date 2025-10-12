@@ -9,5 +9,5 @@ export const intro = `
   You awaken beneath gaslit eaves in a train station that exists beyond the veil.
   Shadows flicker, whispering promises from beyond the fading lights.
   The air hums with the unspoken thoughts of the asleep, and your senses quiver with both dread and wonder.
-  Tonight, you are waiting on your train. Where does it take you?
+  Tonight, you are waiting for your train. Where does it take you?
 `;

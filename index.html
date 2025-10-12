@@ -83,6 +83,15 @@
     button:active { transform: translateY(1px); }
     button[aria-busy=true] { opacity: 0.7; cursor: progress; }
 
+    /* Loading indicator */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      width: 14px; height: 14px; border: 2px solid var(--border);
+      border-top-color: var(--focus); border-radius: 50%;
+      display: inline-block; animation: spin 0.8s linear infinite;
+      vertical-align: -2px; margin-right: 8px;
+    }
+
     a { color: var(--focus); }
   </style>
   <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
@@ -96,6 +105,7 @@
 
     <div id="messages" class="chat" aria-live="polite" :aria-busy="isLoading ? 'true' : 'false'">
       <div v-for="(m, i) in messages" :key="i" class="msg" :class="m.role" v-text="m.content"></div>
+      <div v-if="isLoading" class="msg a"><span class="spinner" aria-hidden="true"></span>{{ loadingText }}</div>
     </div>
 
     <form @submit.prevent="onSubmit">
@@ -103,16 +113,31 @@
       <button type="submit" :aria-busy="isLoading ? 'true' : 'false'" :disabled="isLoading">Speak</button>
     </form>
 
-    <p class="small">Powered by <a href="https://vuejs.org/" target="_blank" rel="noreferrer">Vue</a> and <a href="https://docs.nano-gpt.com/quickstart#text-generation" target="_blank" rel="noreferrer">NanoGPT</a>.</p>
+    <p class="small">Made with 🤖 by <a href="https://github.com/fazo96" target="_blank" rel="noreferrer">fazo96</a>.</p>
   </div>
   <script type="module">
-    const { createApp, ref } = Vue;
+    const { createApp, ref, watch, onBeforeUnmount } = Vue;
 
     createApp({
       setup() {
         const messages = ref([]);
         const prompt = ref('');
         const isLoading = ref(false);
+
+        // Themed loading phrases that cycle while waiting for a response
+        const loadingPhrases = [
+          'Consulting the Stationmaster…',
+          'Listening to the rails whisper…',
+          'Bartering with shadows…',
+          'Counting the teeth of old gears…',
+          'Stoking the occult engine…',
+          'Peering beyond the veil…',
+          'Summoning timetables from forgotten years…',
+          'Feeding coal to the dreaming boiler…'
+        ];
+        const loadingText = ref(loadingPhrases[0]);
+        let loadingTimer = null;
+        let phraseIndex = 0;
 
         async function loadHistory() {
           try {
@@ -132,6 +157,8 @@
           const value = prompt.value.trim();
           if (!value || isLoading.value) return;
           messages.value.push({ role: 'u', content: value });
+          // Clear input immediately on send
+          prompt.value = '';
           isLoading.value = true;
           try {
             const res = await fetch('/api/chat', {
@@ -149,14 +176,35 @@
             messages.value.push({ role: 'a', content: `Request failed: ${e instanceof Error ? e.message : String(e)}` });
           } finally {
             isLoading.value = false;
-            prompt.value = '';
           }
         }
+
+        // Cycle through loading phrases while isLoading is true
+        watch(isLoading, (active) => {
+          if (active) {
+            phraseIndex = Math.floor(Math.random() * loadingPhrases.length);
+            loadingText.value = loadingPhrases[phraseIndex];
+            if (loadingTimer) clearInterval(loadingTimer);
+            loadingTimer = setInterval(() => {
+              phraseIndex = (phraseIndex + 1) % loadingPhrases.length;
+              loadingText.value = loadingPhrases[phraseIndex];
+            }, 3000);
+          } else {
+            if (loadingTimer) {
+              clearInterval(loadingTimer);
+              loadingTimer = null;
+            }
+          }
+        });
+
+        onBeforeUnmount(() => {
+          if (loadingTimer) clearInterval(loadingTimer);
+        });
 
         // Load initial history on mount
         loadHistory();
 
-        return { messages, prompt, isLoading, onSubmit };
+        return { messages, prompt, isLoading, onSubmit, loadingText };
       }
     }).mount('#app');
   </script>
