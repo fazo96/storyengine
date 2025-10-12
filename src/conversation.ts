@@ -1,6 +1,6 @@
 import { ChatMessage } from "./types.ts";
 import { narratorPrompt } from "./game.ts";
-import { inferenceWithTools } from "./llm.ts";
+import { inferenceStream, inferenceWithTools } from "./llm.ts";
 import { getSave, createSave, updateSave } from "./save.ts";
 import { world } from "./game.ts";
 import { ensureArrayOfMessages } from "./utils.ts";
@@ -52,11 +52,13 @@ export async function handleChat(request: Request): Promise<Response> {
     start(controller) {
       (async () => {
         try {
-          // Use tool-enabled inference (non-streaming), then emit as NDJSON
-          fullContent = await inferenceWithTools(apiMessages);
-          // Emit one delta with the full content for UI compatibility
-          controller.enqueue(enc.encode(JSON.stringify({ type: "delta", content: fullContent }) + "\n"));
-
+          // Stream assistant tokens
+          for await (const chunk of inferenceStream(apiMessages)) {
+            console.log('chunk', chunk);
+            fullContent += String(chunk);
+            const line = JSON.stringify({ type: "delta", content: String(chunk) }) + "\n";
+            controller.enqueue(enc.encode(line));
+          }
           // Persist to a save (create if missing)
           try {
             const existing = saveId ? getSave(saveId) : null;
