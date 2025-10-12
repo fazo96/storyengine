@@ -63,7 +63,7 @@ export async function* inferenceStream(messages: ChatMessage[]): AsyncGenerator<
 
   while (!doneWithTools) {
     doneWithTools = true; // this will get set to false if there are tool calls during this inference
-    console.log('beginning inference', accumulatedMessages.length);
+    console.log('beginning inference', accumulatedMessages.length, accumulatedMessages);
     const response = await fetch(`${apiUrl}/chat/completions`, {
       method: "POST",
       headers: {
@@ -136,6 +136,10 @@ export async function* inferenceStream(messages: ChatMessage[]): AsyncGenerator<
               const toolCalls = (delta as Record<string, unknown>)["tool_calls"];
               if (Array.isArray(toolCalls) && toolCalls.length > 0) {
                 allToolCalls = [...allToolCalls, ...toolCalls];
+                accumulatedMessages = [...accumulatedMessages, {
+                  role: 'assistant',
+                  tool_calls: toolCalls,
+                }];
                 doneWithTools = false;
               }
             } else {
@@ -155,11 +159,12 @@ export async function* inferenceStream(messages: ChatMessage[]): AsyncGenerator<
             }
             for (const tc of allToolCalls) {
               console.log('Tool call', tc.id, tc.function.name, tc.function.arguments);
-              yield "Calling tool: " + tc.function.name;
+              yield "[Calling tool: " + tc.function.name + "]\n\n";
               // TODO: execute tools in parallel (not very important)
               const result = await executeTool(tc);
               if (result) {
                 console.log('Tool result', result);
+                yield "[Tool result: " + result.content + "]\n\n";
                 accumulatedMessages = [...accumulatedMessages, result];
                 doneWithTools = false;
               }
