@@ -104,6 +104,17 @@ function listSaves(): Array<Pick<Save, "id" | "title" | "updatedAt">> {
   return rows.map((r) => ({ id: r.id as string, title: r.title as string, updatedAt: r.updated_at as number }));
 }
 
+function deleteSave(id: string): boolean {
+  try {
+    const result = db.prepare("DELETE FROM saves WHERE id = ?").run(id);
+    const changes = (result as { changes?: number } | undefined)?.changes ?? 0;
+    return changes > 0;
+  } catch (err) {
+    console.error(`Failed to delete save: ${err instanceof Error ? err.message : String(err)}`);
+    return false;
+  }
+}
+
 async function serveIndex(_request: Request): Promise<Response> {
   try {
     const file = await Deno.readFile(new URL("./index.html", import.meta.url));
@@ -233,6 +244,20 @@ function router(request: Request): Promise<Response> | Response {
   if (request.method === "GET" && url.pathname === "/api/saves") {
     const saves = listSaves();
     return new Response(JSON.stringify({ saves }), {
+      headers: { "content-type": "application/json; charset=utf-8" },
+    });
+  }
+  if (request.method === "DELETE" && url.pathname.startsWith("/api/saves/")) {
+    const id = decodeURIComponent(url.pathname.slice("/api/saves/".length)).trim();
+    if (!id) {
+      return new Response(JSON.stringify({ ok: false, error: "Missing id" }), {
+        status: 400,
+        headers: { "content-type": "application/json; charset=utf-8" },
+      });
+    }
+    const ok = deleteSave(id);
+    return new Response(JSON.stringify({ ok }), {
+      status: ok ? 200 : 404,
       headers: { "content-type": "application/json; charset=utf-8" },
     });
   }
