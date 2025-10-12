@@ -1,4 +1,4 @@
-import { systemPrompt, intro, narratorPrompt } from "./src/game.ts";
+import { systemPrompt, narratorPrompt, world } from "./src/game.ts";
 import { DatabaseSync as DB } from "node:sqlite";
 import { inference } from "./src/llm.ts";
 
@@ -62,7 +62,7 @@ async function deriveTitle(messages: ChatMessage[]): Promise<string | null> {
 
 function createSave(initialMessages: ChatMessage[]): { id: string; title: string; messages: ChatMessage[] } {
   const id = crypto.randomUUID();
-  const title = "New Game"; // placeholder until first user message
+  const title = world.name; // placeholder until first user message
   const messagesJson = JSON.stringify(initialMessages.filter((m) => ["user", "assistant", "game"].includes(m.role)));
   const ts = nowMs();
   db.prepare(
@@ -87,7 +87,7 @@ async function updateSave(id: string, messages: ChatMessage[]): Promise<{ title:
     return { title: created.title };
   }
   let title = existing.title;
-  if (!title || title === "New Game") {
+  if (!title || title === world.name) {
     const derived = await deriveTitle(messages);
     if (derived) title = derived;
   }
@@ -222,7 +222,7 @@ function handleHistory(request: Request): Response {
   // Create a new save seeded with the intro assistant message
   // Do not save it to the DB for now.
   const seedMessages: ChatMessage[] = [
-    { role: "assistant", content: intro },
+    { role: "assistant", content: world.intro },
   ];
   return new Response(
     JSON.stringify({ saveId: null, title: "New Game", messages: seedMessages }),

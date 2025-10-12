@@ -107,22 +107,22 @@
 <body>
   <div id="app" class="container">
     <header>
-      <h1>Storyengine <span class="sigil">— the Station Beyond the Veil</span></h1>
+      <h1>Storyengine <span class="sigil" v-if="title && !showLoad">— {{ title }}</span></h1>
       <span class="small">AI powered story game</span>
     </header>
 
     <div style="display:flex; gap:10px; align-items:center; padding:10px 0 6px;">
-      <span class="small">Save: {{ title || 'New Game' }}<span v-if="saveId"> (#{{ saveId.slice(0,8) }})</span></span>
+      <span v-if="!showLoad" class="small">Save: {{ title || 'New Game' }}<span v-if="saveId"> (#{{ saveId.slice(0,8) }})</span></span>
       <button @click="newGame" :disabled="isLoading">New Game</button>
-      <button @click="openLoad" :disabled="isLoading">Load Game</button>
+      <button v-if="!showLoad" @click="openLoad" :disabled="isLoading">Load Game</button>
     </div>
 
-    <div id="messages" class="chat" aria-live="polite" :aria-busy="isLoading ? 'true' : 'false'">
+    <div v-if="!showLoad" id="messages" class="chat" aria-live="polite" :aria-busy="isLoading ? 'true' : 'false'">
       <div v-for="(m, i) in messages" :key="i" class="msg" :class="m.role" v-html="renderMarkdown(m.content)"></div>
       <div v-if="isLoading" class="msg a"><span class="spinner" aria-hidden="true"></span>{{ loadingText }}</div>
     </div>
 
-    <form @submit.prevent="onSubmit">
+    <form v-if="!showLoad" @submit.prevent="onSubmit">
       <input name="prompt" type="text" placeholder="Ask / Act / Reflect" autocomplete="off" required v-model="prompt" :disabled="isLoading">
       <button type="submit" :aria-busy="isLoading ? 'true' : 'false'" :disabled="isLoading">Speak</button>
     </form>
@@ -159,7 +159,7 @@
         const isLoading = ref(false);
         const saveId = ref('');
         const title = ref('New Game');
-        const showLoad = ref(false);
+        const showLoad = ref(true);
         const saves = ref([]);
 
         // Themed loading phrases that cycle while waiting for a response
@@ -245,6 +245,7 @@
         async function newGame() {
           if (isLoading.value) return;
           isLoading.value = true;
+          showLoad.value = false;
           try {
             const res = await fetch('/api/history');
             const data = await res.json().catch(() => ({}));
@@ -333,8 +334,8 @@
           if (loadingTimer) clearInterval(loadingTimer);
         });
 
-        // Load initial history on mount
-        loadHistory();
+        // Show saves list by default on start
+        openLoad();
 
         function renderMarkdown(text) {
           try {
