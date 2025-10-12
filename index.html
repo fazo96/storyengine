@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Storyengine</title>
+  <link rel="preconnect" href="https://unpkg.com">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,700;1,400;1,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      /* Fallen London / Cultist Simulator-inspired palette */
+      --bg-0: #0b0f14;         /* abyssal blue-black */
+      --bg-1: #121821;         /* deep ink */
+      --panel: #161c27;        /* shadowed panel */
+      --panel-2: #1c2330;      /* elevated panel */
+      --bone: #e9e6d8;         /* parchment text */
+      --muted: #b7b3a3;        /* muted parchment */
+      --accent: #7a2f4b;       /* wine/rosewood */
+      --accent-2: #2b6f6f;     /* occult teal */
+      --border: #2a3140;       /* iron border */
+      --glow: #a86c8a;         /* faint wine glow */
+      --focus: #b89f5b;        /* antique gold */
+    }
+
+    body {
+      margin: 0; padding: 0;
+      color: var(--bone);
+      background:
+        radial-gradient(1200px 600px at 20% 0%, rgba(122,47,75,0.08), transparent 60%),
+        radial-gradient(1000px 500px at 80% 20%, rgba(43,111,111,0.08), transparent 60%),
+        linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 100%);
+      font-family: "Inter", system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial;
+    }
+
+    .container { max-width: 820px; margin: 0 auto; padding: 20px; }
+
+    header { display: flex; align-items: baseline; gap: 10px; padding: 16px 0 10px; border-bottom: 1px solid var(--border); }
+    h1 { font-family: "EB Garamond", Georgia, serif; font-weight: 700; font-size: 22px; margin: 0; letter-spacing: 0.5px; }
+    .sigil { font-variant: small-caps; letter-spacing: 2px; color: var(--muted); }
+    .small { opacity: 0.8; font-size: 12px; color: var(--muted); }
+
+    .chat {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      min-height: 280px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.0)),
+        radial-gradient(600px 200px at 50% -10%, rgba(168,108,138,0.08), transparent 70%),
+        var(--panel);
+      box-shadow: 0 0 0 1px rgba(184,159,91,0.04) inset, 0 10px 30px rgba(0,0,0,0.35);
+    }
+
+    .msg { margin: 0 0 12px 0; padding: 10px 12px; border-radius: 8px; line-height: 1.5; white-space: pre-wrap; word-wrap: break-word; border: 1px solid var(--border); }
+    .u { background: linear-gradient(180deg, rgba(122,47,75,0.18), rgba(122,47,75,0.12)); color: #f3eade; box-shadow: 0 0 0 1px rgba(122,47,75,0.3) inset; }
+    .a { background: linear-gradient(180deg, rgba(43,111,111,0.18), rgba(43,111,111,0.12)); color: #e8f4f1; box-shadow: 0 0 0 1px rgba(43,111,111,0.28) inset; }
+
+    form { display: flex; gap: 10px; margin-top: 14px; }
+    input[name=prompt] {
+      flex: 1; padding: 12px 14px; border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--bone);
+      outline: none;
+      transition: border-color 120ms ease, box-shadow 120ms ease;
+    }
+    input[name=prompt]::placeholder { color: color-mix(in srgb, var(--muted) 80%, var(--bone)); opacity: 0.8; }
+    input[name=prompt]:focus { border-color: var(--focus); box-shadow: 0 0 0 3px rgba(184,159,91,0.18); }
+
+    button {
+      padding: 12px 16px; border: 1px solid var(--border); border-radius: 10px;
+      background: linear-gradient(180deg, rgba(184,159,91,0.18), rgba(184,159,91,0.08));
+      color: var(--bone);
+      cursor: pointer;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+      transition: transform 80ms ease, box-shadow 160ms ease, border-color 160ms ease;
+    }
+    button:hover { border-color: var(--focus); box-shadow: 0 0 12px rgba(184,159,91,0.18), 0 0 0 1px rgba(184,159,91,0.1) inset; }
+    button:active { transform: translateY(1px); }
+    button[aria-busy=true] { opacity: 0.7; cursor: progress; }
+
+    a { color: var(--focus); }
+  </style>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+</head>
+<body>
+  <div id="app" class="container">
+    <header>
+      <h1>Storyengine <span class="sigil">— the Station Beyond the Veil</span></h1>
+      <span class="small">AI powered story game</span>
+    </header>
+
+    <div id="messages" class="chat" aria-live="polite" :aria-busy="isLoading ? 'true' : 'false'">
+      <div v-for="(m, i) in messages" :key="i" class="msg" :class="m.role" v-text="m.content"></div>
+    </div>
+
+    <form @submit.prevent="onSubmit">
+      <input name="prompt" type="text" placeholder="Speak your intent to the Parlour" autocomplete="off" required v-model="prompt" :disabled="isLoading">
+      <button type="submit" :aria-busy="isLoading ? 'true' : 'false'" :disabled="isLoading">Speak</button>
+    </form>
+
+    <p class="small">Powered by <a href="https://vuejs.org/" target="_blank" rel="noreferrer">Vue</a> and <a href="https://docs.nano-gpt.com/quickstart#text-generation" target="_blank" rel="noreferrer">NanoGPT</a>.</p>
+  </div>
+  <script type="module">
+    const { createApp, ref } = Vue;
+
+    createApp({
+      setup() {
+        const messages = ref([]);
+        const prompt = ref('');
+        const isLoading = ref(false);
+
+        async function loadHistory() {
+          try {
+            const res = await fetch('/api/history');
+            const data = await res.json().catch(() => ({}));
+            const msgs = Array.isArray(data.messages) ? data.messages : [];
+            // Expect entries like { role: 'a'|'u', content: string }
+            messages.value = msgs
+              .filter(m => m && typeof m.content === 'string' && typeof m.role === 'string')
+              .map(m => ({ role: m.role, content: m.content }));
+          } catch (e) {
+            messages.value = [{ role: 'a', content: `Failed to load history: ${e instanceof Error ? e.message : String(e)}` }];
+          }
+        }
+
+        async function onSubmit() {
+          const value = prompt.value.trim();
+          if (!value || isLoading.value) return;
+          messages.value.push({ role: 'u', content: value });
+          isLoading.value = true;
+          try {
+            const res = await fetch('/api/chat', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              // Send the full chat history so the backend can provide context
+              body: JSON.stringify({ messages: messages.value })
+            });
+            const data = await res.json().catch(() => ({}));
+            const assistant = typeof data.assistant === 'string' ? data.assistant : '';
+            const error = typeof data.error === 'string' ? data.error : '';
+            const content = error ? `Error: ${error}` : assistant;
+            messages.value.push({ role: 'a', content });
+          } catch (e) {
+            messages.value.push({ role: 'a', content: `Request failed: ${e instanceof Error ? e.message : String(e)}` });
+          } finally {
+            isLoading.value = false;
+            prompt.value = '';
+          }
+        }
+
+        // Load initial history on mount
+        loadHistory();
+
+        return { messages, prompt, isLoading, onSubmit };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>
+
+
