@@ -1,6 +1,6 @@
 import { systemPrompt, narratorPrompt, world } from "./src/game.ts";
 import { DatabaseSync as DB } from "node:sqlite";
-import { inference } from "./src/llm.ts";
+import { inference, inferenceStream } from "./src/llm.ts";
 
 const serverPort = 8080;
 
@@ -129,7 +129,7 @@ async function serveIndex(_request: Request): Promise<Response> {
 
 async function handleChat(request: Request): Promise<Response> {
   // Accept JSON body with full chat history and saveId
-  // { saveId?: string, messages: [{ role: 'u'|'a'|'user'|'assistant', content: string }, ...] }
+  // { saveId?: string, messages: [{ role: 'user'|'assistant', content: string }, ...] }
   const contentType = request.headers.get("content-type") ?? "";
   let providedMessages: ChatMessage[] | null = null;
   let providedSaveId: string | null = null;
@@ -144,64 +144,84 @@ async function handleChat(request: Request): Promise<Response> {
     }
   }
 
-  // If neither history nor prompt provided, no-op
+  // If no history provided, return a minimal NDJSON stream that immediately finalizes
   if (!providedMessages || providedMessages.length === 0) {
-    return new Response(JSON.stringify({ assistant: "" }), {
-      headers: { "content-type": "application/json; charset=utf-8" },
+    const enc = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(enc.encode(JSON.stringify({ type: "final", role: "assistant", content: "" }) + "\n"));
+        controller.close();
+      },
+    });
+    return new Response(body, {
+      headers: { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-cache" },
     });
   }
 
-  // Build OpenAI-compatible chat request from provided history or legacy prompt
+  // Build OpenAI-compatible chat request from provided history
   const apiMessages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [];
   apiMessages.push({ role: "system", content: narratorPrompt });
-  if (providedMessages && providedMessages.length > 0) {
-    // Map frontend roles ('u'|'a') to OpenAI roles
-    for (const m of providedMessages.filter((m) => ["user", "assistant"].includes(m.role))) {
-      apiMessages.push({ role: m.role as "user" | "assistant", content: m.content });
-    }
+  for (const m of providedMessages.filter((m) => ["user", "assistant"].includes(m.role))) {
+    apiMessages.push({ role: m.role as "user" | "assistant", content: m.content });
   }
 
-  let content = "No response from API";
-  let success = false;
-
-   try {
-    content = await inference(apiMessages);
-    success = true;
-  } catch (err) {
-    success = false;
-    return new Response(JSON.stringify({ assistant: "", error: err instanceof Error ? err.message : String(err) }), {
-      headers: { "content-type": "application/json; charset-utf-8" },
-    });
-  }
-
-  // Persist to a save (create if missing)
-  let title = "New Game";
+  const enc = new TextEncoder();
   let saveId = providedSaveId ?? "";
-  if (success) {
-    try {
-      const existing = saveId ? getSave(saveId) : null;
-      const messagesWithAssistant: ChatMessage[] = [...(providedMessages ?? []), { role: "assistant", content: String(content) }];
-      if (!existing) {
-        const created = createSave(messagesWithAssistant);
-        saveId = created.id;
-        // Immediately update to derive title from first user message
-        const updated = await updateSave(saveId, messagesWithAssistant);
-        title = updated.title;
-      } else {
-        const updated = await updateSave(saveId, messagesWithAssistant);
-        title = updated.title;
-      }
-    } catch (err) {
-      success = false;
-      content = err instanceof Error ? err.message : String(err);
-    }
-  }
+  let title = "New Game";
+  let fullContent = "";
 
-  // Return JSON response { role, content, saveId, title }
-  return new Response(
-    JSON.stringify({ role: success ? "assistant" : "error", content: String(content), saveId, title }),
-    { headers: { "content-type": "application/json; charset=utf-8" } },
-  );
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      (async () => {
+        try {
+          // Stream assistant tokens
+          for await (const chunk of inferenceStream(apiMessages)) {
+            fullContent += String(chunk);
+            const line = JSON.stringify({ type: "delta", content: String(chunk) }) + "\n";
+            controller.enqueue(enc.encode(line));
+          }
+
+          // Persist to a save (create if missing)
+          try {
+            const existing = saveId ? getSave(saveId) : null;
+            const messagesWithAssistant: ChatMessage[] = [...providedMessages!, { role: "assistant", content: fullContent }];
+            if (!existing) {
+              const created = createSave(messagesWithAssistant);
+              saveId = created.id;
+              const updated = await updateSave(saveId, messagesWithAssistant);
+              title = updated.title;
+            } else {
+              const updated = await updateSave(saveId, messagesWithAssistant);
+              title = updated.title;
+            }
+          } catch (err) {
+            // Attach persistence error as final error but still close stream
+            const finalErr = err instanceof Error ? err.message : String(err);
+            const finalLine = JSON.stringify({ type: "final", role: "error", error: finalErr, content: fullContent, saveId, title }) + "\n";
+            controller.enqueue(enc.encode(finalLine));
+            controller.close();
+            return;
+          }
+
+          const finalLine = JSON.stringify({ type: "final", role: "assistant", content: fullContent, saveId, title }) + "\n";
+          controller.enqueue(enc.encode(finalLine));
+          controller.close();
+        } catch (err) {
+          const finalErr = err instanceof Error ? err.message : String(err);
+          const finalLine = JSON.stringify({ type: "final", role: "error", error: finalErr, content: fullContent, saveId, title }) + "\n";
+          controller.enqueue(enc.encode(finalLine));
+          controller.close();
+        }
+      })();
+    },
+  });
+
+  return new Response(body, {
+    headers: {
+      "content-type": "application/x-ndjson; charset=utf-8",
+      "cache-control": "no-cache",
+    },
+  });
 }
 
 function handleHistory(request: Request): Response {

@@ -213,6 +213,8 @@
           const value = prompt.value.trim();
           if (!value || isLoading.value) return;
           messages.value.push({ role: 'user', content: value });
+          // Prepare an assistant placeholder message to stream into
+          const assistantIndex = messages.value.push({ role: 'assistant', content: '' }) - 1;
           // Clear input immediately on send
           prompt.value = '';
           isLoading.value = true;
@@ -223,18 +225,46 @@
               // Send the full chat history so the backend can provide context
               body: JSON.stringify({ saveId: saveId.value || undefined, messages: messages.value })
             });
-            const data = await res.json().catch(() => ({}));
-            const role = typeof data.role === 'string' ? data.role : '';
-            const dataContent = typeof data.content === 'string' ? data.content : '';
-            const error = typeof data.error === 'string' ? data.error : '';
-            const content = error ? `Error: ${error}` : dataContent;
-            messages.value.push({ role: role, content });
-            const sid = typeof data.saveId === 'string' ? data.saveId : '';
-            const t = typeof data.title === 'string' ? data.title : '';
-            if (sid) {
-              saveId.value = sid;
+
+            if (!res.body) {
+              throw new Error('No response body');
             }
-            if (t) title.value = t;
+
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split(/\r?\n/);
+              buffer = lines.pop() || '';
+              for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed) continue;
+                let obj = null;
+                try { obj = JSON.parse(trimmed); } catch { obj = null; }
+                if (!obj || typeof obj !== 'object') continue;
+                const type = obj.type;
+                if (type === 'delta') {
+                  const chunk = typeof obj.content === 'string' ? obj.content : '';
+                  if (chunk) {
+                    messages.value[assistantIndex].content += chunk;
+                  }
+                } else if (type === 'final') {
+                  const role = typeof obj.role === 'string' ? obj.role : 'assistant';
+                  const finalContent = typeof obj.content === 'string' ? obj.content : '';
+                  const err = typeof obj.error === 'string' ? obj.error : '';
+                  messages.value[assistantIndex].role = role;
+                  messages.value[assistantIndex].content = err ? `Error: ${err}\n\n${finalContent}` : finalContent;
+                  const sid = typeof obj.saveId === 'string' ? obj.saveId : '';
+                  const t = typeof obj.title === 'string' ? obj.title : '';
+                  if (sid) saveId.value = sid;
+                  if (t) title.value = t;
+                }
+              }
+            }
           } catch (e) {
             messages.value.push({ role: 'error', content: `Request failed: ${e instanceof Error ? e.message : String(e)}` });
           } finally {
