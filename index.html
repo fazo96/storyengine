@@ -129,8 +129,14 @@
     </div>
 
     <div v-if="!showLoad" id="messages" class="chat panel" aria-live="polite" :aria-busy="isLoading ? 'true' : 'false'">
-      <div v-for="(m, i) in messages" :key="i" class="msg" :class="m.role" v-html="renderMarkdown(m.content)"></div>
-      <div v-if="isLoading" class="msg a"><span class="spinner" aria-hidden="true"></span>{{ loadingText }}</div>
+      <div v-for="(m, i) in messages" :key="i" class="msg" :class="m.role">
+        <template v-if="m.role === 'assistant' && (!m.content || m.content.length === 0) && isLoading">
+          <span class="spinner" aria-hidden="true"></span>{{ loadingText }}
+        </template>
+        <template v-else>
+          <div v-html="renderMarkdown(m.content)"></div>
+        </template>
+      </div>
     </div>
 
     <form v-if="!showLoad" @submit.prevent="onSubmit">
