@@ -123,7 +123,7 @@
     </div>
 
     <form @submit.prevent="onSubmit">
-      <input name="prompt" type="text" placeholder="Speak your intent to the Parlour" autocomplete="off" required v-model="prompt" :disabled="isLoading">
+      <input name="prompt" type="text" placeholder="Ask / Act / Reflect" autocomplete="off" required v-model="prompt" :disabled="isLoading">
       <button type="submit" :aria-busy="isLoading ? 'true' : 'false'" :disabled="isLoading">Speak</button>
     </form>
 
@@ -191,6 +191,7 @@
               saveId.value = sid;
             }
             title.value = t || title.value;
+            focusInput();
           } catch (e) {
             messages.value = [{ role: 'assistant', content: `Failed to load history: ${e instanceof Error ? e.message : String(e)}` }];
           }
@@ -228,6 +229,15 @@
           }
         }
 
+        function focusInput() {
+          // Focus input field if present, also scroll to the bottom of the page
+          setTimeout(() => {
+            window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+            const input = document.querySelector('input, textarea');
+            if (input) input.focus();
+          }, 100);
+        }
+
         async function newGame() {
           if (isLoading.value) return;
           isLoading.value = true;
@@ -246,12 +256,7 @@
             title.value = t || 'New Game';
           } finally {
             isLoading.value = false;
-            // Focus input field if present, also scroll to the bottom of the page
-            setTimeout(() => {
-              window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-              const input = document.querySelector('input, textarea');
-              if (input) input.focus();
-            }, 100);
+            focusInput();
           }
         }
 
