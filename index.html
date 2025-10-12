@@ -141,7 +141,7 @@
 
     <form v-if="!showLoad" @submit.prevent="onSubmit">
       <input name="prompt" type="text" placeholder="Ask / Act / Reflect" autocomplete="off" required v-model="prompt" :disabled="isLoading">
-      <button type="submit" :aria-busy="isLoading ? 'true' : 'false'" :disabled="isLoading">Speak</button>
+      <button type="submit" :aria-busy="isLoading ? 'true' : 'false'" :disabled="isLoading">Synthetise</button>
     </form>
 
     <div v-if="showLoad" class="panel" style="margin-top:12px;">
