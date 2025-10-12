@@ -103,6 +103,12 @@
       <span class="small">AI powered story game</span>
     </header>
 
+    <div style="display:flex; gap:10px; align-items:center; padding:10px 0 6px;">
+      <span class="small">Save: {{ title || 'New Game' }}<span v-if="saveId"> (#{{ saveId.slice(0,8) }})</span></span>
+      <button @click="newGame" :disabled="isLoading">New Game</button>
+      <button @click="openLoad" :disabled="isLoading">Load Game</button>
+    </div>
+
     <div id="messages" class="chat" aria-live="polite" :aria-busy="isLoading ? 'true' : 'false'">
       <div v-for="(m, i) in messages" :key="i" class="msg" :class="m.role" v-text="m.content"></div>
       <div v-if="isLoading" class="msg a"><span class="spinner" aria-hidden="true"></span>{{ loadingText }}</div>
@@ -112,6 +118,23 @@
       <input name="prompt" type="text" placeholder="Speak your intent to the Parlour" autocomplete="off" required v-model="prompt" :disabled="isLoading">
       <button type="submit" :aria-busy="isLoading ? 'true' : 'false'" :disabled="isLoading">Speak</button>
     </form>
+
+    <div v-if="showLoad" class="chat" style="margin-top:12px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <strong>Load Game</strong>
+        <button @click="closeLoad">Close</button>
+      </div>
+      <div v-if="saves.length === 0" class="small">No saves yet.</div>
+      <ul style="list-style:none; padding:0; margin:0;">
+        <li v-for="s in saves" :key="s.id" style="display:flex; justify-content:space-between; align-items:center; border:1px solid var(--border); border-radius:8px; padding:8px 10px; margin-bottom:8px;">
+          <div>
+            <div style="font-weight:600;">{{ s.title || 'Untitled' }}</div>
+            <div class="small">#{{ s.id.slice(0,8) }} · {{ new Date(s.updatedAt).toLocaleString() }}</div>
+          </div>
+          <button @click="loadExisting(s.id)">Load</button>
+        </li>
+      </ul>
+    </div>
 
     <p class="small">Made with 🤖 by <a href="https://github.com/fazo96" target="_blank" rel="noreferrer">fazo96</a>.</p>
   </div>
@@ -123,6 +146,10 @@
         const messages = ref([]);
         const prompt = ref('');
         const isLoading = ref(false);
+        const saveId = ref('');
+        const title = ref('New Game');
+        const showLoad = ref(false);
+        const saves = ref([]);
 
         // Themed loading phrases that cycle while waiting for a response
         const loadingPhrases = [
@@ -139,24 +166,32 @@
         let loadingTimer = null;
         let phraseIndex = 0;
 
-        async function loadHistory() {
+        async function loadHistory(idOverride = null) {
           try {
-            const res = await fetch('/api/history');
+            const id = typeof idOverride === 'string' ? idOverride : (saveId.value || '');
+            const url = id ? `/api/history?saveId=${encodeURIComponent(id)}` : '/api/history';
+            const res = await fetch(url);
             const data = await res.json().catch(() => ({}));
             const msgs = Array.isArray(data.messages) ? data.messages : [];
+            const sid = typeof data.saveId === 'string' ? data.saveId : '';
+            const t = typeof data.title === 'string' ? data.title : '';
             // Expect entries like { role: 'a'|'u', content: string }
             messages.value = msgs
               .filter(m => m && typeof m.content === 'string' && typeof m.role === 'string')
               .map(m => ({ role: m.role, content: m.content }));
+            if (sid) {
+              saveId.value = sid;
+            }
+            title.value = t || title.value;
           } catch (e) {
-            messages.value = [{ role: 'a', content: `Failed to load history: ${e instanceof Error ? e.message : String(e)}` }];
+            messages.value = [{ role: 'assistant', content: `Failed to load history: ${e instanceof Error ? e.message : String(e)}` }];
           }
         }
 
         async function onSubmit() {
           const value = prompt.value.trim();
           if (!value || isLoading.value) return;
-          messages.value.push({ role: 'u', content: value });
+          messages.value.push({ role: 'user', content: value });
           // Clear input immediately on send
           prompt.value = '';
           isLoading.value = true;
@@ -165,18 +200,71 @@
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               // Send the full chat history so the backend can provide context
-              body: JSON.stringify({ messages: messages.value })
+              body: JSON.stringify({ saveId: saveId.value || undefined, messages: messages.value })
             });
             const data = await res.json().catch(() => ({}));
             const assistant = typeof data.assistant === 'string' ? data.assistant : '';
             const error = typeof data.error === 'string' ? data.error : '';
             const content = error ? `Error: ${error}` : assistant;
-            messages.value.push({ role: 'a', content });
+            messages.value.push({ role: 'assistant', content });
+            const sid = typeof data.saveId === 'string' ? data.saveId : '';
+            const t = typeof data.title === 'string' ? data.title : '';
+            if (sid) {
+              saveId.value = sid;
+            }
+            if (t) title.value = t;
           } catch (e) {
-            messages.value.push({ role: 'a', content: `Request failed: ${e instanceof Error ? e.message : String(e)}` });
+            messages.value.push({ role: 'assistant', content: `Request failed: ${e instanceof Error ? e.message : String(e)}` });
           } finally {
             isLoading.value = false;
           }
+        }
+
+        async function newGame() {
+          if (isLoading.value) return;
+          isLoading.value = true;
+          try {
+            const res = await fetch('/api/history');
+            const data = await res.json().catch(() => ({}));
+            const msgs = Array.isArray(data.messages) ? data.messages : [];
+            messages.value = msgs
+              .filter(m => m && typeof m.content === 'string' && typeof m.role === 'string')
+              .map(m => ({ role: m.role, content: m.content }));
+            const sid = typeof data.saveId === 'string' ? data.saveId : '';
+            const t = typeof data.title === 'string' ? data.title : '';
+            if (sid) {
+              saveId.value = sid;
+            }
+            title.value = t || 'New Game';
+          } finally {
+            isLoading.value = false;
+            // Focus input field if present, also scroll to the bottom of the page
+            setTimeout(() => {
+              window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+              const input = document.querySelector('input, textarea');
+              if (input) input.focus();
+            }, 100);
+          }
+        }
+
+        function openLoad() {
+          showLoad.value = true;
+          fetch('/api/saves')
+            .then(r => r.json())
+            .then(d => {
+              const arr = Array.isArray(d.saves) ? d.saves : [];
+              saves.value = arr
+                .filter(s => s && typeof s.id === 'string')
+                .map(s => ({ id: s.id, title: typeof s.title === 'string' ? s.title : 'Untitled', updatedAt: Number(s.updatedAt) || 0 }));
+            })
+            .catch(() => { saves.value = []; });
+        }
+
+        function closeLoad() { showLoad.value = false; }
+
+        async function loadExisting(id) {
+          await loadHistory(id);
+          showLoad.value = false;
         }
 
         // Cycle through loading phrases while isLoading is true
@@ -204,7 +292,7 @@
         // Load initial history on mount
         loadHistory();
 
-        return { messages, prompt, isLoading, onSubmit, loadingText };
+        return { messages, prompt, isLoading, onSubmit, loadingText, saveId, title, showLoad, saves, newGame, openLoad, closeLoad, loadExisting };
       }
     }).mount('#app');
   </script>
