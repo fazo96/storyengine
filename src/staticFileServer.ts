@@ -1,6 +1,6 @@
 export async function serveIndex(_request: Request): Promise<Response> {
   try {
-    const file = await Deno.readFile(new URL("../index.html", import.meta.url));
+    const file = await Deno.readFile(new URL("../static/index.html", import.meta.url));
     return new Response(file, {
       headers: { "content-type": "text/html; charset=utf-8" },
     });

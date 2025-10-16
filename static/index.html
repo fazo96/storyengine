@@ -118,17 +118,19 @@
 <body>
   <div id="app" class="container">
     <header>
-      <h1>Storyengine <span class="sigil" v-if="title && !showLoad">— {{ title }}</span></h1>
-      <span class="small">AI powered story game made with 🤖 by <a href="https://github.com/fazo96" target="_blank" rel="noreferrer">fazo96</a></span>
+      <h1>Storyengine <span class="sigil" v-if="title && currentScreen === 'game'">— {{ title }}</span></h1>
+      <span class="small">AI powered story game made with 🤖 by <a href="https://github.com/fazo96" target="_blank"
+          rel="noreferrer">fazo96</a></span>
     </header>
 
     <div style="display:flex; gap:10px; align-items:center; padding:10px 0 6px;">
-      <span v-if="!showLoad" class="small">Save: {{ title || 'New Game' }}<span v-if="saveId"> (#{{ saveId.slice(0,8) }})</span></span>
-      <button @click="newGame" :disabled="isLoading">New Game</button>
-      <button v-if="!showLoad" @click="openLoad" :disabled="isLoading">Load Game</button>
+      <span v-if="currentScreen === 'game'" class="small">Save: {{ title || 'New Game' }}<span v-if="saveId"> (#{{ saveId.slice(0,8) }})</span></span>
+      <button @click="openWorlds" :disabled="isLoading">New Game</button>
+      <button v-if="currentScreen === 'game'" @click="openLoad" :disabled="isLoading">Load Game</button>
+      <button v-if="currentScreen === 'game'" @click="toggleBgm" :disabled="isLoading">{{ isBgmPlaying ? 'Pause Music' : 'Play Music' }}</button>
     </div>
 
-    <div v-if="!showLoad" id="messages" class="chat panel" aria-live="polite" :aria-busy="isLoading ? 'true' : 'false'">
+    <div v-if="currentScreen === 'game'" id="messages" class="chat panel" aria-live="polite" :aria-busy="isLoading ? 'true' : 'false'">
       <div v-for="(m, i) in messages" :key="i" class="msg" :class="m.role">
         <template v-if="m.role === 'assistant' && (!m.content || m.content.length === 0) && isLoading">
           <span class="spinner" aria-hidden="true"></span>{{ loadingText }}
@@ -139,12 +141,12 @@
       </div>
     </div>
 
-    <form v-if="!showLoad" @submit.prevent="onSubmit">
+    <form v-if="currentScreen === 'game'" @submit.prevent="onSubmit">
       <input name="prompt" type="text" placeholder="Ask / Act / Reflect" autocomplete="off" required v-model="prompt" :disabled="isLoading">
       <button type="submit" :aria-busy="isLoading ? 'true' : 'false'" :disabled="isLoading">Synthetise</button>
     </form>
 
-    <div v-if="showLoad" class="panel" style="margin-top:12px;">
+    <div v-if="currentScreen === 'load'" class="panel" style="margin-top:12px;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
         <strong>Load Game</strong>
         <button @click="closeLoad">Close</button>
@@ -163,6 +165,25 @@
         </li>
       </ul>
     </div>
+
+    <div v-if="currentScreen === 'worlds'" class="panel" style="margin-top:12px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <strong>Choose World</strong>
+        <button @click="closeWorlds">Close</button>
+      </div>
+      <div v-if="worlds.length === 0" class="small">No worlds available.</div>
+      <ul style="list-style:none; padding:0; margin:0;">
+        <li v-for="w in worlds" :key="w.id" style="display:flex; gap:10px; border:1px solid var(--border); border-radius:8px; padding:10px; margin-bottom:8px;">
+          <div style="flex:1; min-width:0;">
+            <div style="font-weight:600; margin-bottom:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ w.name }}</div>
+            <div class="small" style="opacity:0.9; max-height:4.8em; overflow:hidden;">{{ w.description }}</div>
+          </div>
+          <div style="display:flex; align-items:center;">
+            <button @click="startWorld(w.id)">Start</button>
+          </div>
+        </li>
+      </ul>
+    </div>
   </div>
   <script type="module">
     const { createApp, ref, watch, onBeforeUnmount, nextTick } = Vue;
@@ -173,9 +194,15 @@
         const prompt = ref('');
         const isLoading = ref(false);
         const saveId = ref('');
+        const worldId = ref('');
         const title = ref('New Game');
-        const showLoad = ref(true);
+        // One place to control which screen is visible: 'home' | 'worlds' | 'load' | 'game'
+        const currentScreen = ref('load');
+        const worlds = ref([]);
         const saves = ref([]);
+        // Background music element reference
+        const bgmEl = ref(document.getElementById('bgm'));
+        const isBgmPlaying = ref(false);
 
         // Themed loading phrases that cycle while waiting for a response
         const loadingPhrases = [
@@ -229,7 +256,7 @@
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               // Send the full chat history so the backend can provide context
-              body: JSON.stringify({ saveId: saveId.value || undefined, messages: messages.value })
+              body: JSON.stringify({ saveId: saveId.value || undefined, worldId: worldId.value || undefined, messages: messages.value })
             });
 
             if (!res.body) {
@@ -290,31 +317,60 @@
           }, 100);
         }
 
-        async function newGame() {
-          if (isLoading.value) return;
+        function openWorlds() {
+          currentScreen.value = 'worlds';
+          fetch('/api/worlds')
+            .then(r => r.json())
+            .then(d => {
+              const arr = Array.isArray(d.worlds) ? d.worlds : [];
+              worlds.value = arr
+                .filter(w => w && typeof w.id === 'string' && typeof w.name === 'string')
+                .map(w => ({ id: w.id, name: String(w.name), description: String(w.description || ''), intro: String(w.intro || '') }));
+            })
+            .catch(() => { worlds.value = []; });
+        }
+
+        function closeWorlds() { currentScreen.value = 'game'; }
+
+        async function startWorld(selectedWorldId) {
+          if (!selectedWorldId || isLoading.value) return;
           isLoading.value = true;
-          showLoad.value = false;
           try {
-            const res = await fetch('/api/history');
+            const res = await fetch(`/api/history?worldId=${encodeURIComponent(selectedWorldId)}`);
             const data = await res.json().catch(() => ({}));
+            if (typeof data.error === 'string' && data.error) {
+              throw new Error(data.error);
+            }
             const msgs = Array.isArray(data.messages) ? data.messages : [];
             messages.value = msgs
               .filter(m => m && typeof m.content === 'string' && typeof m.role === 'string')
               .map(m => ({ role: m.role, content: m.content }));
             const sid = typeof data.saveId === 'string' ? data.saveId : '';
+            const wid = typeof data.worldId === 'string' ? data.worldId : '';
             const t = typeof data.title === 'string' ? data.title : '';
             if (sid) {
               saveId.value = sid;
+            } else {
+              saveId.value = '';
+            }
+            if (wid) {
+              worldId.value = wid;
+            } else {
+              worldId.value = '';
             }
             title.value = t || 'New Game';
+            await playBgm();
+          } catch (e) {
+            alert(`Failed to start world: ${e instanceof Error ? e.message : String(e)}`);
           } finally {
             isLoading.value = false;
+            currentScreen.value = 'game';
             focusInput();
           }
         }
 
         function openLoad() {
-          showLoad.value = true;
+          currentScreen.value = 'load';
           fetch('/api/saves')
             .then(r => r.json())
             .then(d => {
@@ -326,11 +382,46 @@
             .catch(() => { saves.value = []; });
         }
 
-        function closeLoad() { showLoad.value = false; }
+        function closeLoad() { currentScreen.value = 'game'; }
 
         async function loadExisting(id) {
           await loadHistory(id);
-          showLoad.value = false;
+          currentScreen.value = 'game';
+          await playBgm();
+        }
+
+        async function playBgm() {
+          const el = bgmEl.value;
+          if (!el) return;
+
+          try {
+            el.volume = 0.5;
+            await el.play();
+            isBgmPlaying.value = true;
+          } catch (_) {
+            isBgmPlaying.value = false;
+          }
+        }
+
+        async function pauseBgm() {
+          const el = bgmEl.value;
+          if (!el) return;
+          try {
+            await el.pause();
+          } finally {
+            isBgmPlaying.value = false;
+          }
+        }
+
+        function toggleBgm() {
+          const el = bgmEl.value;
+          console.log('toggleBgm', el);
+          if (!el) return;
+          if (el.paused) {
+            playBgm();
+          } else {
+            pauseBgm();
+          }
         }
 
         async function deleteSave(id) {
@@ -341,7 +432,8 @@
             if (ok) {
               // If the deleted save is the current one, reset session
               if (saveId.value && saveId.value === id) {
-                await newGame();
+                currentScreen.value = 'worlds';
+                worldId.value = '';
                 saveId.value = '';
                 title.value = 'New Game';
               }
@@ -414,19 +506,27 @@
           loadingText,
           saveId,
           title,
-          showLoad,
           saves,
-          newGame,
+          openWorlds,
+          closeWorlds,
+          startWorld,
           openLoad,
           closeLoad,
           loadExisting,
           deleteSave,
           confirmDelete,
-          renderMarkdown
+          renderMarkdown,
+          bgmEl,
+          isBgmPlaying,
+          toggleBgm,
+          worlds,
+          currentScreen
         };
       }
     }).mount('#app');
   </script>
+  <!-- Background music; hidden, controlled via user actions (New/Load) -->
+  <audio id="bgm" ref="bgmEl" src="/static/assets/Shadows%20in%20the%20Fog.mp3" preload="none" loop style="display:none"></audio>
 </body>
 </html>
 

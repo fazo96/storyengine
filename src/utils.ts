@@ -1,5 +1,7 @@
 import { Role, ChatMessage } from "./types.ts";
 
+export function nowMs(): number { return Date.now(); }
+
 export function ensureArrayOfMessages(value: unknown, includeRoles: Role[] = []): ChatMessage[] {
   if (!Array.isArray(value)) return [];
   return value

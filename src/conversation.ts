@@ -1,9 +1,9 @@
 import { ChatMessage } from "./types.ts";
-import { narratorPrompt } from "./game.ts";
-import { inferenceStream, inferenceWithTools } from "./llm.ts";
+import { inferenceStream } from "./llm.ts";
 import { getSave, createSave, updateSave } from "./save.ts";
-import { world } from "./game.ts";
+import { getWorldById } from "./worlds.ts";
 import { ensureArrayOfMessages } from "./utils.ts";
+import { buildSystemPrompt } from "./game.ts";
 
 export async function handleChat(request: Request): Promise<Response> {
   // Accept JSON body with full chat history and saveId
@@ -11,6 +11,7 @@ export async function handleChat(request: Request): Promise<Response> {
   const contentType = request.headers.get("content-type") ?? "";
   let providedMessages: ChatMessage[] | null = null;
   let providedSaveId: string | null = null;
+  let providedWorldId: string | null = null;
   if (contentType.includes("application/json")) {
     const data: unknown = await request.json().catch(() => ({} as unknown));
     if (typeof data === "object" && data !== null) {
@@ -19,6 +20,8 @@ export async function handleChat(request: Request): Promise<Response> {
       if (Array.isArray(msgs)) providedMessages = ensureArrayOfMessages(msgs);
       const sid = obj.saveId;
       if (typeof sid === "string" && sid.trim().length > 0) providedSaveId = sid.trim();
+      const wid = obj.worldId;
+      if (typeof wid === "string" && wid.trim().length > 0) providedWorldId = wid.trim();
     }
   }
 
@@ -36,17 +39,22 @@ export async function handleChat(request: Request): Promise<Response> {
     });
   }
 
-  // Build OpenAI-compatible chat request from provided history
-  const apiMessages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [];
-  apiMessages.push({ role: "system", content: narratorPrompt });
-  for (const m of providedMessages.filter((m) => ["user", "assistant"].includes(m.role))) {
-    apiMessages.push({ role: m.role as "user" | "assistant", content: m.content });
-  }
-
   const enc = new TextEncoder();
   let saveId = providedSaveId ?? "";
+  const worldId = providedWorldId ?? (await getSave(saveId)?.worldId ?? "");
   let title = "New Game";
   let fullContent = "";
+
+  // Build OpenAI-compatible chat request from provided history
+  // Also prepend the system prompt
+  const world = getWorldById(worldId);
+  if (!world) throw new Error(`World not found: ${worldId}`);
+
+  const systemPrompt = buildSystemPrompt(world);
+  const apiMessages: ChatMessage[] = [
+    { role: "system", content: systemPrompt },
+    ...providedMessages.filter((m) => ["user", "assistant"].includes(m.role)),
+  ];
 
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
@@ -64,12 +72,12 @@ export async function handleChat(request: Request): Promise<Response> {
             const existing = saveId ? getSave(saveId) : null;
             const messagesWithAssistant: ChatMessage[] = [...providedMessages!, { role: "assistant", content: fullContent }];
             if (!existing) {
-              const created = createSave(messagesWithAssistant);
+              const created = createSave(messagesWithAssistant, worldId);
               saveId = created.id;
-              const updated = await updateSave(saveId, messagesWithAssistant);
+              const updated = await updateSave(saveId, messagesWithAssistant, worldId);
               title = updated.title;
             } else {
-              const updated = await updateSave(saveId, messagesWithAssistant);
+              const updated = await updateSave(saveId, messagesWithAssistant, worldId);
               title = updated.title;
             }
           } catch (err) {
@@ -104,6 +112,7 @@ export async function handleChat(request: Request): Promise<Response> {
 export function handleHistory(request: Request): Response {
   const url = new URL(request.url);
   const saveIdParam = (url.searchParams.get("saveId") ?? "").trim();
+  const worldIdParam = (url.searchParams.get("worldId") ?? "").trim();
 
   if (saveIdParam) {
     const existing = getSave(saveIdParam);
@@ -116,13 +125,26 @@ export function handleHistory(request: Request): Response {
     // If not found, create a new game (as requested)
   }
 
-  // Create a new save seeded with the intro assistant message
-  // Do not save it to the DB for now.
+  // Starting a new game requires a worldId
+  if (!worldIdParam) {
+    return new Response(JSON.stringify({ error: "Missing worldId" }), {
+      status: 400,
+      headers: { "content-type": "application/json; charset=utf-8" },
+    });
+  }
+  const world = getWorldById(worldIdParam);
+  if (!world) {
+    return new Response(JSON.stringify({ error: "World not found" }), {
+      status: 404,
+      headers: { "content-type": "application/json; charset=utf-8" },
+    });
+  }
+  // Create a new session seeded with the world's intro (no save yet)
   const seedMessages: ChatMessage[] = [
     { role: "assistant", content: world.intro },
   ];
   return new Response(
-    JSON.stringify({ saveId: null, title: "New Game", messages: seedMessages }),
+    JSON.stringify({ saveId: null, worldId: world.id, title: world.name || "New Game", messages: seedMessages }),
     { headers: { "content-type": "application/json; charset=utf-8" } },
   );
 }
