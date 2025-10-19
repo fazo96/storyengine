@@ -1,4 +1,4 @@
-import { Role, ChatMessage } from "./types.ts";
+import { Role, ChatMessage } from "../types.ts";
 
 export function nowMs(): number { return Date.now(); }
 

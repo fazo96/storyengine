@@ -1,4 +1,4 @@
-import { ChatMessage } from "./types.ts";
+import type { ChatMessage } from "../types.ts";
 
 export interface ToolDefinition {
   name: string;

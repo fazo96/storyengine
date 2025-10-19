@@ -1,0 +1,102 @@
+
+html, body { height: 100%; }
+:root {
+  color-scheme: dark;
+  /* Fallen London / Cultist Simulator-inspired palette */
+  --bg-0: #0b0f14;         /* abyssal blue-black */
+  --bg-1: #121821;         /* deep ink */
+  --panel: #161c27;        /* shadowed panel */
+  --panel-2: #1c2330;      /* elevated panel */
+  --bone: #e9e6d8;         /* parchment text */
+  --muted: #b7b3a3;        /* muted parchment */
+  --accent: #7a2f4b;       /* wine/rosewood */
+  --accent-2: #2b6f6f;     /* occult teal */
+  --border: #2a3140;       /* iron border */
+  --glow: #a86c8a;         /* faint wine glow */
+  --focus: #b89f5b;        /* antique gold */
+}
+
+body {
+  margin: 0; padding: 0;
+  color: var(--bone);
+  background:
+    radial-gradient(1200px 600px at 20% 0%, rgba(122,47,75,0.08), transparent 60%),
+    radial-gradient(1000px 500px at 80% 20%, rgba(43,111,111,0.08), transparent 60%),
+    linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 100%);
+  font-family: "Inter", system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial;
+}
+
+#app { max-width: 820px; margin: 0 auto; padding: 20px; height: calc(100dvh - 40px); display: flex; flex-direction: column; }
+
+header { display: flex; align-items: baseline; gap: 10px; padding: 16px 0 10px; border-bottom: 1px solid var(--border); }
+h1 { font-family: "EB Garamond", Georgia, serif; font-weight: 700; font-size: 22px; margin: 0; letter-spacing: 0.5px; }
+.sigil { font-variant: small-caps; letter-spacing: 2px; color: var(--muted); }
+.small { opacity: 0.8; font-size: 12px; color: var(--muted); }
+
+.panel {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.0)),
+    radial-gradient(600px 200px at 50% -10%, rgba(168,108,138,0.08), transparent 70%),
+    var(--panel);
+  box-shadow: 0 0 0 1px rgba(184,159,91,0.04) inset, 0 10px 30px rgba(0,0,0,0.35);
+}
+
+.chat {
+  /* Make chat fill available space and scroll */
+  flex: 1;
+  min-height: 0; /* allow flex child to shrink */
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end; /* anchor short content to bottom */
+  overflow-y: auto;
+  scroll-behavior: smooth;
+}
+
+.msg { margin: 0 0 12px 0; padding: 10px 12px; border-radius: 8px; line-height: 1.5; white-space: pre-wrap; word-wrap: break-word; border: 1px solid var(--border); }
+.u, .user { background: linear-gradient(180deg, rgba(122,47,75,0.18), rgba(122,47,75,0.12)); color: #f3eade; box-shadow: 0 0 0 1px rgba(122,47,75,0.3) inset; }
+.a, .assistant { background: linear-gradient(180deg, rgba(43,111,111,0.18), rgba(43,111,111,0.12)); color: #e8f4f1; box-shadow: 0 0 0 1px rgba(43,111,111,0.28) inset; }
+
+form { display: flex; gap: 10px; margin-top: 14px; }
+input[name=prompt] {
+  flex: 1; padding: 12px 14px; border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--bone);
+  outline: none;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+input[name=prompt]::placeholder { color: color-mix(in srgb, var(--muted) 80%, var(--bone)); opacity: 0.8; }
+input[name=prompt]:focus { border-color: var(--focus); box-shadow: 0 0 0 3px rgba(184,159,91,0.18); }
+
+button {
+  padding: 12px 16px; border: 1px solid var(--border); border-radius: 10px;
+  background: linear-gradient(180deg, rgba(184,159,91,0.18), rgba(184,159,91,0.08));
+  color: var(--bone);
+  cursor: pointer;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  transition: transform 80ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+button:hover { border-color: var(--focus); box-shadow: 0 0 12px rgba(184,159,91,0.18), 0 0 0 1px rgba(184,159,91,0.1) inset; }
+button:active { transform: translateY(1px); }
+button[aria-busy=true] { opacity: 0.7; cursor: progress; }
+
+/* Loading indicator */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner {
+  width: 14px; height: 14px; border: 2px solid var(--border);
+  border-top-color: var(--focus); border-radius: 50%;
+  display: inline-block; animation: spin 0.8s linear infinite;
+  vertical-align: -2px; margin-right: 8px;
+}
+
+a { color: var(--focus); }
+
+/* Markdown content styling inside messages */
+.msg p { margin: 0 0 8px 0; }
+.msg pre { background: var(--panel-2); padding: 8px; border-radius: 6px; overflow: auto; }
+.msg code { background: var(--panel-2); padding: 2px 4px; border-radius: 4px; }
+.msg a { text-decoration: underline; }

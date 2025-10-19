@@ -1,6 +1,6 @@
 import { getDB } from "./db.ts";
 import { nowMs } from "./utils.ts";
-import { World } from "./types.ts";
+import type { World } from "../types.ts";
 
 export function listWorlds(): World[] {
   seedDefaultWorldIfMissing();

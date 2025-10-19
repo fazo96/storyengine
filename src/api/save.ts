@@ -1,5 +1,5 @@
 import { buildSystemPrompt } from "./game.ts";
-import { ChatMessage, Save, ChatMessageText, World } from "./types.ts";
+import type { ChatMessage, Save, ChatMessageText, World } from "../types.ts";
 import { getDB } from "./db.ts";
 import { inference } from "./llm.ts";
 import { ensureArrayOfMessages } from "./utils.ts";

@@ -1,4 +1,4 @@
-import { World } from "./types.ts";
+import { World } from "../types.ts";
 
 export function buildSystemPrompt(world: World): string {
   return `

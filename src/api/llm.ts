@@ -1,5 +1,6 @@
-import { ChatMessage } from "./types.ts";
-import { toolDefinitions, executeTool, ToolCall } from "./tools.ts";
+import type { ChatMessage } from "../types.ts";
+import { toolDefinitions, executeTool } from "./tools.ts";
+import type { ToolCall } from "./tools.ts";
 
 export async function inference(messages: ChatMessage[]): Promise<string> {
     const apiKey = Deno.env.get("API_KEY");

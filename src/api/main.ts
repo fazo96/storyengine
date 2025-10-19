@@ -1,4 +1,6 @@
-import { router } from "./src/router.ts";
+/// <reference lib="deno.ns" />
+
+import { router } from "./router.ts";
 
 if (import.meta.main) {
   const serverPort = Number(Deno.env.get("PORT") || 8080);

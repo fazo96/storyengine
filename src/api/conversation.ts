@@ -1,9 +1,9 @@
-import { ChatMessage } from "./types.ts";
-import { inferenceStream } from "./llm.ts";
-import { getSave, createSave, updateSave } from "./save.ts";
-import { getWorldById } from "./worlds.ts";
-import { ensureArrayOfMessages } from "./utils.ts";
-import { buildSystemPrompt } from "./game.ts";
+import { ChatMessage } from "../types.ts";
+import { inferenceStream } from "../api/llm.ts";
+import { getSave, createSave, updateSave } from "../api/save.ts";
+import { getWorldById } from "../api/worlds.ts";
+import { ensureArrayOfMessages } from "../api/utils.ts";
+import { buildSystemPrompt } from "../api/game.ts";
 
 export async function handleChat(request: Request): Promise<Response> {
   // Accept JSON body with full chat history and saveId

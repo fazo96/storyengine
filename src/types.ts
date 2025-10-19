@@ -1,4 +1,4 @@
-import { ToolCall } from "./tools.ts";
+import type { ToolCall } from "./api/tools.ts";
 
 export type Role = "user" | "assistant" | "system" | "game" | "tool" | "error";
 

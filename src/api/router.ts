@@ -1,5 +1,3 @@
-import { serveIndex } from "./staticFileServer.ts";
-import { serveDir } from "@std/http/file-server";
 import { handleHistory, handleChat } from "./conversation.ts";
 import { listWorlds, createWorld, updateWorld, deleteWorld } from "./worlds.ts";
 import { getDB } from "./db.ts";
@@ -94,12 +92,6 @@ export async function router(request: Request): Promise<Response> {
       status: ok ? 200 : 404,
       headers: { "content-type": "application/json; charset=utf-8" },
     });
-  }
-  if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
-    return serveIndex(request);
-  }
-  if (request.method === "GET" && url.pathname.startsWith("/static")) {
-    return serveDir(request);
   }
   return new Response("Not Found", { status: 404 });
 }
